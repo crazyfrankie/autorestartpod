@@ -258,14 +258,92 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput := getMetricsOutput()
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		It("should reconcile an AutoRestartPod custom resource", func() {
+			By("creating a test namespace")
+			testNamespace := "test-autorestart"
+			cmd := exec.Command("kubectl", "create", "ns", testNamespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create test namespace")
+			defer func() {
+				cmd := exec.Command("kubectl", "delete", "ns", testNamespace)
+				_, _ = utils.Run(cmd)
+			}()
+
+			By("creating a test pod that matches the selector")
+			cmd = exec.Command("kubectl", "run", "test-nginx", "--image=nginx:latest",
+				"--labels=app=nginx", "--namespace", testNamespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create test pod")
+
+			By("waiting for the test pod to be running")
+			verifyPodRunning := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pod", "test-nginx",
+					"-n", testNamespace, "-o", "jsonpath={.status.phase}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Running"), "Test pod should be running")
+			}
+			Eventually(verifyPodRunning).Should(Succeed())
+
+			By("creating an AutoRestartPod custom resource")
+			// Get current time for immediate scheduling
+			currentTime := time.Now().Add(time.Minute) // Schedule to run 1 minute from now
+			schedule := fmt.Sprintf("%d %d * * * ?", currentTime.Minute(), currentTime.Hour())
+
+			autoRestartYAML := fmt.Sprintf(`
+apiVersion: stable.crazyfrank.com/v1
+kind: AutoRestartPod
+metadata:
+  name: test-autorestart
+  namespace: %s
+spec:
+  schedule: "%s"
+  selector:
+    matchLabels:
+      app: nginx
+  timeZone: "Asia/Shanghai"
+`, testNamespace, schedule)
+
+			autoRestartFile := filepath.Join("/tmp", "test-autorestart.yaml")
+			err = os.WriteFile(autoRestartFile, []byte(autoRestartYAML), os.FileMode(0o644))
+			Expect(err).NotTo(HaveOccurred(), "Failed to create AutoRestartPod YAML file")
+
+			cmd = exec.Command("kubectl", "apply", "-f", autoRestartFile)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply AutoRestartPod resource")
+
+			By("verifying the reconciliation has occurred")
+			Eventually(func(g Gomega) {
+				// Check if the status field is updated with lastRestartTime
+				cmd := exec.Command("kubectl", "get", "autorestartpod", "test-autorestart",
+					"-n", testNamespace, "-o", "jsonpath={.status.lastRestartTime}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(BeEmpty(), "LastRestartTime should be set")
+			}, time.Minute*2, time.Second*5).Should(Succeed())
+
+			By("verifying the pod was restarted")
+			// Get the current pod's creation timestamp
+			cmd = exec.Command("kubectl", "get", "pod", "test-nginx",
+				"-n", testNamespace, "-o", "jsonpath={.metadata.creationTimestamp}")
+			creationTime, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Make sure the pod gets restarted
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pod", "test-nginx",
+					"-n", testNamespace, "-o", "jsonpath={.metadata.creationTimestamp}")
+				newCreationTime, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(newCreationTime).NotTo(Equal(creationTime), "Pod should have been restarted with a new creation timestamp")
+			}, time.Minute*3, time.Second*10).Should(Succeed())
+
+			By("checking the controller metrics for reconciliation")
+			metricsOutput := getMetricsOutput()
+			Expect(metricsOutput).To(ContainSubstring(
+				"controller_runtime_reconcile_total{controller=\"autorestartpod\",result=\"success\"}",
+			), "Should have successful reconciliation metrics")
+		})
 	})
 })
 

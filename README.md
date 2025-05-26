@@ -1,8 +1,19 @@
-# autorestartpod
-// TODO(user): Add simple overview of use/purpose
+# AutoRestartPod
+
+A Kubernetes operator that provides automated pod restart functionality based on cron schedules.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+AutoRestartPod is a Kubernetes operator built with Kubebuilder that enables automated pod restarts based on cron schedules. It allows cluster administrators and application owners to define custom restart policies for their pods without manual intervention.
+
+This controller is useful for scenarios where applications require periodic restarts to:
+- Clear memory leaks
+- Apply configuration changes that require restarts
+- Refresh connections to external services
+- Perform routine maintenance tasks
+- Implement rolling restarts for stateless applications
+
+The controller uses standard cron syntax for scheduling, supports time zone configuration, and targets pods using Kubernetes label selectors.
 
 ## Getting Started
 
@@ -38,6 +49,42 @@ make deploy IMG=<some-registry>/autorestartpod:tag
 > **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
 privileges or be logged in as admin.
 
+## CRD Specification
+
+The AutoRestartPod CRD has the following structure:
+
+```yaml
+apiVersion: stable.crazyfrank.com/v1
+kind: AutoRestartPod
+metadata:
+  name: string
+  namespace: string
+spec:
+  # Cron schedule in standard cron format (required)
+  # Examples: 
+  # - "0 3 * * * ?" (every day at 3:00 AM)
+  # - "0 */6 * * * ?" (every 6 hours)
+  # - "0 0 * * 0 ?" (every Sunday at midnight)
+  schedule: string
+  
+  # Standard Kubernetes label selector (required)
+  # Used to identify which pods to restart
+  selector:
+    matchLabels:
+      key1: value1
+      key2: value2
+    matchExpressions:
+      - {key: key3, operator: In, values: [value3, value4]}
+  
+  # Time zone for the schedule (optional, defaults to UTC)
+  # Examples: "UTC", "America/New_York", "Asia/Shanghai"
+  timeZone: string
+  
+status:
+  # The last time pods were restarted by this controller
+  lastRestartTime: timestamp
+```
+
 **Create instances of your solution**
 You can apply the samples (examples) from the config/sample:
 
@@ -45,7 +92,74 @@ You can apply the samples (examples) from the config/sample:
 kubectl apply -k config/samples/
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+### Usage Examples
+
+#### Basic AutoRestartPod Example
+
+Create an AutoRestartPod resource to restart all nginx pods in the default namespace every day at 3:00 AM:
+
+```yaml
+apiVersion: stable.crazyfrank.com/v1
+kind: AutoRestartPod
+metadata:
+  name: nginx-daily-restart
+  namespace: default
+spec:
+  schedule: "0 3 * * * ?"  # Every day at 3:00 AM
+  selector:
+    matchLabels:
+      app: nginx
+  timeZone: "UTC"  # Optional timezone
+```
+
+#### Multiple Restart Schedules
+
+You can create multiple AutoRestartPod resources for different restart schedules or target different pods:
+
+```yaml
+# Restart frontend pods on weekdays at 2:00 AM
+apiVersion: stable.crazyfrank.com/v1
+kind: AutoRestartPod
+metadata:
+  name: frontend-weekday-restart
+  namespace: prod
+spec:
+  schedule: "0 2 * * 1-5 ?"  # Every weekday at 2:00 AM
+  selector:
+    matchLabels:
+      component: frontend
+  timeZone: "America/New_York"
+```
+
+```yaml
+# Restart backend pods every 12 hours
+apiVersion: stable.crazyfrank.com/v1
+kind: AutoRestartPod
+metadata:
+  name: backend-12h-restart
+  namespace: prod
+spec:
+  schedule: "0 */12 * * * ?"  # Every 12 hours
+  selector:
+    matchLabels:
+      component: backend
+  timeZone: "Asia/Shanghai"
+```
+
+#### Check Status
+
+You can check the status of your AutoRestartPod resource:
+
+```sh
+kubectl get autorestartpod nginx-daily-restart -o yaml
+```
+
+The status section will show the last restart time:
+
+```yaml
+status:
+  lastRestartTime: "2025-05-26T03:00:05Z"
+```
 
 ### To Uninstall
 **Delete the instances (CRs) from the cluster:**
@@ -111,11 +225,45 @@ previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml
 is manually re-applied afterwards.
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
 
-**NOTE:** Run `make help` for more information on all potential `make` targets
+Contributions to the AutoRestartPod project are welcome! Here's how you can contribute:
 
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+1. **Report Issues**: If you find bugs or have feature requests, please open an issue on the project repository.
+
+2. **Submit Pull Requests**: 
+   - Fork the repository
+   - Create a feature branch (`git checkout -b feature/amazing-feature`)
+   - Commit your changes (`git commit -m 'Add some amazing feature'`)
+   - Push to the branch (`git push origin feature/amazing-feature`)
+   - Open a Pull Request
+
+3. **Documentation**: Help improve documentation, examples, or tutorials.
+
+4. **Testing**: Add more test cases or improve existing tests.
+
+### Development Environment Setup
+
+1. Clone the repository:
+   ```sh
+   git clone https://github.com/crazyfrankie/autorestart-operator.git
+   cd autorestart-operator
+   ```
+
+2. Install dependencies:
+   ```sh
+   go mod download
+   ```
+
+3. Run tests:
+   ```sh
+   make test
+   ```
+
+4. Run the controller locally:
+   ```sh
+   make install
+   make run
+   ```
 
 ## License
 

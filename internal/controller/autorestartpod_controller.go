@@ -87,7 +87,7 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: schedule.Next(time.Now()).Sub(time.Now())}, nil
+	return ctrl.Result{RequeueAfter: time.Until(nextRun)}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
