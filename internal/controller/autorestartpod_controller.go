@@ -95,6 +95,7 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
+	// Always update LastRestartTime, even if no pods were deleted
 	obj.Status.LastRestartTime = &metav1.Time{Time: now}
 	if err := r.Status().Update(ctx, obj); err != nil {
 		return ctrl.Result{}, err
@@ -106,11 +107,13 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 // parseCronSchedule parses cron expressions in various formats,
 // including standard cron and cron with seconds.
 func parseCronSchedule(schedule string) (cron.Schedule, error) {
+	// First try with standard 5-field cron format
 	standardParser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 	if sch, err := standardParser.Parse(schedule); err == nil {
 		return sch, nil
 	}
 
+	// Then try with 6-field format that includes seconds
 	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 	return parser.Parse(schedule)
 }

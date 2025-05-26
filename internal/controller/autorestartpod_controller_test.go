@@ -100,18 +100,20 @@ var _ = Describe("AutoRestartPod Controller", func() {
 
 	Context("When testing cron schedule formats", func() {
 		It("should support standard cron format", func() {
-			parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-
-			_, err := parser.Parse("*/5 * * * *")
+			// First try standard 5-field cron format
+			standardParser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+			_, err := standardParser.Parse("*/5 * * * *")
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = parser.Parse("30 */5 * * * *")
+			_, err = standardParser.Parse("0 0 * * MON-FRI")
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = parser.Parse("@hourly")
+			_, err = standardParser.Parse("@hourly")
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = parser.Parse("0 0 * * MON-FRI")
+			// Then try with seconds format
+			secondsParser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+			_, err = secondsParser.Parse("30 */5 * * * *")
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
