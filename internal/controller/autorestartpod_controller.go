@@ -31,13 +31,6 @@ import (
 	stablev1 "github.com/crazyfrankie/autorestart-operator/api/v1"
 )
 
-// parseCronSchedule 解析各种格式的cron表达式，包括标准cron和带秒的cron
-func parseCronSchedule(schedule string) (cron.Schedule, error) {
-	// 尝试使用高级解析器（支持秒级别和描述符）
-	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-	return parser.Parse(schedule)
-}
-
 // AutoRestartPodReconciler reconciles a AutoRestartPod object
 type AutoRestartPodReconciler struct {
 	client.Client
@@ -108,6 +101,18 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	return ctrl.Result{RequeueAfter: time.Until(nextRun)}, nil
+}
+
+// parseCronSchedule parses cron expressions in various formats,
+// including standard cron and cron with seconds.
+func parseCronSchedule(schedule string) (cron.Schedule, error) {
+	standardParser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	if sch, err := standardParser.Parse(schedule); err == nil {
+		return sch, nil
+	}
+
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	return parser.Parse(schedule)
 }
 
 // SetupWithManager sets up the controller with the Manager.

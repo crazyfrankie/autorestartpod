@@ -38,7 +38,7 @@ var _ = Describe("AutoRestartPod Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "kubectl-system",
+			Namespace: "default",
 		}
 		autorestartpod := &stablev1.AutoRestartPod{}
 
@@ -49,7 +49,7 @@ var _ = Describe("AutoRestartPod Controller", func() {
 				resource := &stablev1.AutoRestartPod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
-						Namespace: "kubectl-system",
+						Namespace: "default",
 					},
 					Spec: stablev1.AutoRestartPodSpec{
 						Schedule: "*/5 * * * *",
