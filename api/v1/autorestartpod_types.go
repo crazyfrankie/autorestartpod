@@ -25,9 +25,9 @@ import (
 
 // AutoRestartPodSpec defines the desired state of AutoRestartPod.
 type AutoRestartPodSpec struct {
-	Schedule string               `json:"schedule"`           // Define Cron expressions (e.g. "0 3 * * * *")
-	Selector metav1.LabelSelector `json:"selector"`           // Define the label selector for the Pod to be restarted.
-	TimeZone string               `json:"timeZone,omitempty"` // Optional: time zone (e.g. "Asia/Shanghai")
+	Schedule string               `json:"schedule"`           // 定义Cron表达式 (例如 "0 3 * * *" 或 "30 */5 * * * *")
+	Selector metav1.LabelSelector `json:"selector"`           // 定义用于选择要重启的Pod的标签选择器
+	TimeZone string               `json:"timeZone,omitempty"` // 可选：时区 (例如 "Asia/Shanghai")
 }
 
 // AutoRestartPodStatus defines the observed state of AutoRestartPod.

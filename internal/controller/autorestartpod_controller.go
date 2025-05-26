@@ -31,6 +31,13 @@ import (
 	stablev1 "github.com/crazyfrankie/autorestart-operator/api/v1"
 )
 
+// parseCronSchedule 解析各种格式的cron表达式，包括标准cron和带秒的cron
+func parseCronSchedule(schedule string) (cron.Schedule, error) {
+	// 尝试使用高级解析器（支持秒级别和描述符）
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	return parser.Parse(schedule)
+}
+
 // AutoRestartPodReconciler reconciles a AutoRestartPod object
 type AutoRestartPodReconciler struct {
 	client.Client
@@ -57,13 +64,26 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	schedule, err := cron.ParseStandard(obj.Spec.Schedule)
+	schedule, err := parseCronSchedule(obj.Spec.Schedule)
 	if err != nil {
+		log.Error(err, "Failed to parse cron schedule", "schedule", obj.Spec.Schedule)
 		return ctrl.Result{}, err
 	}
 
-	nextRun := schedule.Next(time.Now())
-	if now := time.Now(); nextRun.After(now) {
+	var now time.Time
+	if obj.Spec.TimeZone != "" {
+		loc, err := time.LoadLocation(obj.Spec.TimeZone)
+		if err != nil {
+			log.Error(err, "Failed to parse timezone", "timezone", obj.Spec.TimeZone)
+			return ctrl.Result{}, err
+		}
+		now = time.Now().In(loc)
+	} else {
+		now = time.Now()
+	}
+
+	nextRun := schedule.Next(now)
+	if nextRun.After(now) {
 		return ctrl.Result{RequeueAfter: nextRun.Sub(now)}, nil
 	}
 
@@ -82,7 +102,7 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}
 
-	obj.Status.LastRestartTime = &metav1.Time{Time: time.Now()}
+	obj.Status.LastRestartTime = &metav1.Time{Time: now}
 	if err := r.Status().Update(ctx, obj); err != nil {
 		return ctrl.Result{}, err
 	}

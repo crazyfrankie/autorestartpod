@@ -6,4 +6,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: autorestartpod-sample
 spec:
-  # TODO(user): Add fields here
+  schedule: "30 4 * * *"  # 每天凌晨4:30执行
+  selector:
+    matchLabels:
+      app: sample-app
+  timeZone: "UTC"

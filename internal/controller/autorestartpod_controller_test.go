@@ -21,11 +21,11 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/robfig/cron/v3"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	stablev1 "github.com/crazyfrankie/autorestart-operator/api/v1"
 )
@@ -52,7 +52,7 @@ var _ = Describe("AutoRestartPod Controller", func() {
 						Namespace: "kubectl-system",
 					},
 					Spec: stablev1.AutoRestartPodSpec{
-						Schedule: "* 0/5 * * * ? ",
+						Schedule: "*/5 * * * *",
 						Selector: metav1.LabelSelector{
 							MatchLabels: map[string]string{
 								"app": "nginx",
@@ -95,6 +95,24 @@ var _ = Describe("AutoRestartPod Controller", func() {
 
 			// Verify the requeue time is set for the next scheduled run
 			// Note: This test is simplified, in a real test you might mock time.Now() to control timing
+		})
+	})
+
+	Context("When testing cron schedule formats", func() {
+		It("should support standard cron format", func() {
+			parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+
+			_, err := parser.Parse("*/5 * * * *")
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = parser.Parse("30 */5 * * * *")
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = parser.Parse("@hourly")
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = parser.Parse("0 0 * * MON-FRI")
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

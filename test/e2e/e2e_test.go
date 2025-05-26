@@ -288,7 +288,7 @@ var _ = Describe("Manager", Ordered, func() {
 			By("creating an AutoRestartPod custom resource")
 			// Get current time for immediate scheduling
 			currentTime := time.Now().Add(time.Minute) // Schedule to run 1 minute from now
-			schedule := fmt.Sprintf("%d %d * * * ?", currentTime.Minute(), currentTime.Hour())
+			schedule := fmt.Sprintf("%d %d * * *", currentTime.Minute(), currentTime.Hour())
 
 			autoRestartYAML := fmt.Sprintf(`
 apiVersion: stable.crazyfrank.com/v1

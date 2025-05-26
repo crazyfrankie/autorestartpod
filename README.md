@@ -60,11 +60,23 @@ metadata:
   name: string
   namespace: string
 spec:
-  # Cron schedule in standard cron format (required)
-  # Examples: 
-  # - "0 3 * * * ?" (every day at 3:00 AM)
-  # - "0 */6 * * * ?" (every 6 hours)
-  # - "0 0 * * 0 ?" (every Sunday at midnight)
+   # Cron schedule in standard cron format (required)
+   # Examples.
+   # - "0 3 * * * *" (every day at 3:00 AM)
+   # - "*/6 * * * * *" (every 6 hours)
+   # - "0 0 * * * 0" (every Sunday at midnight)
+   # - "30 45 9 * * * *" (executed every day at 9:45:30)
+   #
+   # Format description:
+   # Standard cron format: minutes hours days months weeks
+   # Standard cron format: minutes, hours, days, months, weeks.
+   # # Format description: # Standard cron format: minute hour day month week # Format with seconds: second minute hour day month week
+   # Special descriptors are also supported:
+   # - @yearly, @annually: "0 0 0 1 1 *" (executed at midnight on January 1 of each year)
+   # - @monthly: "0 0 0 1 * *" (executed at midnight on the 1st of each month)
+   # - @weekly: "0 0 0 0 * * 0" (executed every Sunday at midnight)
+   # - @daily, @midnight: "0 0 0 0 * * *" (executed at midnight every day)
+   # - @hourly: "0 0 0 * * * *" (executed every hour)
   schedule: string
   
   # Standard Kubernetes label selector (required)
@@ -105,11 +117,11 @@ metadata:
   name: nginx-daily-restart
   namespace: default
 spec:
-  schedule: "0 3 * * * ?"  # Every day at 3:00 AM
+  schedule: "0 3 * * *"  # 每天凌晨3点
   selector:
     matchLabels:
       app: nginx
-  timeZone: "UTC"  # Optional timezone
+  timeZone: "UTC"  # 可选时区设置
 ```
 
 #### Multiple Restart Schedules
@@ -124,7 +136,7 @@ metadata:
   name: frontend-weekday-restart
   namespace: prod
 spec:
-  schedule: "0 2 * * 1-5 ?"  # Every weekday at 2:00 AM
+  schedule: "0 2 * * 1-5"  # 工作日凌晨2点
   selector:
     matchLabels:
       component: frontend
@@ -139,7 +151,7 @@ metadata:
   name: backend-12h-restart
   namespace: prod
 spec:
-  schedule: "0 */12 * * * ?"  # Every 12 hours
+  schedule: "0 */12 * * *"  # 每12小时执行一次
   selector:
     matchLabels:
       component: backend
