@@ -1,0 +1,9 @@
+apiVersion: stable.crazyfrank.com/v1
+kind: AutoRestartPod
+metadata:
+  labels:
+    app.kubernetes.io/name: autorestartpod
+    app.kubernetes.io/managed-by: kustomize
+  name: autorestartpod-sample
+spec:
+  # TODO(user): Add fields here
