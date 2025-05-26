@@ -286,9 +286,10 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyPodRunning).Should(Succeed())
 
 			By("creating an AutoRestartPod custom resource")
-			// Get current time for immediate scheduling
-			currentTime := time.Now().Add(time.Minute) // Schedule to run 1 minute from now
-			schedule := fmt.Sprintf("%d %d * * *", currentTime.Minute(), currentTime.Hour())
+			// Get current time plus 30 seconds for immediate scheduling
+			currentTime := time.Now().Add(30 * time.Second)
+			// Use seconds-based cron format to ensure precise timing
+			schedule := fmt.Sprintf("%d %d %d * * *", currentTime.Second(), currentTime.Minute(), currentTime.Hour())
 
 			autoRestartYAML := fmt.Sprintf(`
 apiVersion: stable.crazyfrank.com/v1

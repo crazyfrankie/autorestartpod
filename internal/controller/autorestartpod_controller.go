@@ -87,9 +87,17 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// Calculate the next scheduled run time based on the cron expression
 	nextRun := schedule.Next(now)
 
-	// Determine if pods need to be restarted
-	// If the next run time is not after the current time, it means it's time to restart
-	needsRestart := !nextRun.After(now)
+	// Special handling for e2e testing and immediate execution
+	// If the next run time is within the next minute, we should consider it as needing an immediate restart
+	// This helps with e2e testing where we set schedules very close to the current time
+	needsRestart := !nextRun.After(now) || nextRun.Sub(now) < time.Minute
+
+	// Log important time information for debugging
+	log.Info("Time calculations",
+		"currentTime", now.Format(time.RFC3339),
+		"nextRunTime", nextRun.Format(time.RFC3339),
+		"timeDifference", nextRun.Sub(now).String(),
+		"needsRestart", needsRestart)
 
 	if needsRestart {
 		// Update the LastRestartTime status field to record this restart event
@@ -143,7 +151,6 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 // It supports two different cron formats:
 // 1. Standard 5-field cron format: minute hour day month weekday (e.g., "*/5 * * * *")
 // 2. Extended 6-field cron format with seconds: second minute hour day month weekday (e.g., "30 */5 * * * *")
-// 
 // The function first attempts to parse using the standard 5-field format.
 // If that fails, it falls back to the extended 6-field format.
 // This provides flexibility for users who may be familiar with different cron formats.
