@@ -76,6 +76,12 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	nextRun := schedule.Next(now)
+
+	obj.Status.LastRestartTime = &metav1.Time{Time: now}
+	if err := r.Status().Update(ctx, obj); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if nextRun.After(now) {
 		return ctrl.Result{RequeueAfter: nextRun.Sub(now)}, nil
 	}
@@ -93,12 +99,6 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		} else {
 			log.Info("Restart pod", "pod ", pod.Name)
 		}
-	}
-
-	// Always update LastRestartTime, even if no pods were deleted
-	obj.Status.LastRestartTime = &metav1.Time{Time: now}
-	if err := r.Status().Update(ctx, obj); err != nil {
-		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{RequeueAfter: time.Until(nextRun)}, nil
