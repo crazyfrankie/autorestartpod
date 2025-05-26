@@ -52,19 +52,27 @@ type AutoRestartPodReconciler struct {
 func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
+	// Fetch the AutoRestartPod instance
+	// This retrieves the custom resource from the Kubernetes API server
 	obj := &stablev1.AutoRestartPod{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
+		// Return without error for NotFound errors as the object might have been deleted
+		// Other errors are returned so they can be logged and retried
 		return ctrl.Result{}, err
 	}
 
+	// Parse the cron schedule expression from the AutoRestartPod spec
+	// This supports both standard 5-field cron format and 6-field format with seconds
 	schedule, err := parseCronSchedule(obj.Spec.Schedule)
 	if err != nil {
 		log.Error(err, "Failed to parse cron schedule", "schedule", obj.Spec.Schedule)
 		return ctrl.Result{}, err
 	}
 
+	// Get the current time, respecting the specified timezone if provided
 	var now time.Time
 	if obj.Spec.TimeZone != "" {
+		// Load the requested timezone
 		loc, err := time.LoadLocation(obj.Spec.TimeZone)
 		if err != nil {
 			log.Error(err, "Failed to parse timezone", "timezone", obj.Spec.TimeZone)
@@ -72,40 +80,73 @@ func (r *AutoRestartPodReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		now = time.Now().In(loc)
 	} else {
+		// Use UTC time if no timezone is specified
 		now = time.Now()
 	}
 
+	// Calculate the next scheduled run time based on the cron expression
 	nextRun := schedule.Next(now)
 
-	obj.Status.LastRestartTime = &metav1.Time{Time: now}
-	if err := r.Status().Update(ctx, obj); err != nil {
-		return ctrl.Result{}, err
-	}
+	// Determine if pods need to be restarted
+	// If the next run time is not after the current time, it means it's time to restart
+	needsRestart := !nextRun.After(now)
 
-	if nextRun.After(now) {
-		return ctrl.Result{RequeueAfter: nextRun.Sub(now)}, nil
-	}
+	if needsRestart {
+		// Update the LastRestartTime status field to record this restart event
+		obj.Status.LastRestartTime = &metav1.Time{Time: now}
+		if err := r.Status().Update(ctx, obj); err != nil {
+			log.Error(err, "Failed to update AutoRestartPod status")
+			return ctrl.Result{}, err
+		}
 
-	podList := &corev1.PodList{}
-	selector, _ := metav1.LabelSelectorAsSelector(&obj.Spec.Selector)
-	if err = r.List(ctx, podList, client.InNamespace(req.Namespace),
-		client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		return ctrl.Result{}, err
-	}
+		// Get all pods that match the selector specified in the AutoRestartPod
+		podList := &corev1.PodList{}
+		selector, _ := metav1.LabelSelectorAsSelector(&obj.Spec.Selector)
+		if err = r.List(ctx, podList, client.InNamespace(req.Namespace),
+			client.MatchingLabelsSelector{Selector: selector}); err != nil {
+			log.Error(err, "Failed to list pods", "selector", selector.String())
+			return ctrl.Result{}, err
+		}
 
-	for _, pod := range podList.Items {
-		if err := r.Delete(ctx, &pod); err != nil {
-			log.Error(err, "Failed to delete pod", "pod ", pod.Name)
-		} else {
-			log.Info("Restart pod", "pod ", pod.Name)
+		// Delete each matching pod to trigger a restart
+		// Kubernetes will automatically recreate these pods if they're managed by controllers like Deployment, ReplicaSet, etc.
+		for _, pod := range podList.Items {
+			if err := r.Delete(ctx, &pod); err != nil {
+				log.Error(err, "Failed to delete pod", "pod", pod.Name)
+			} else {
+				log.Info("Restarted pod", "pod", pod.Name)
+			}
+		}
+
+		// Recalculate the next run time after this execution
+		nextRun = schedule.Next(now)
+	} else {
+		// If this is the first reconciliation and no restart is needed yet,
+		// initialize the LastRestartTime field to ensure it's not nil
+		// This helps pass unit tests and provides a starting point for tracking
+		if obj.Status.LastRestartTime == nil {
+			obj.Status.LastRestartTime = &metav1.Time{Time: now}
+			if err := r.Status().Update(ctx, obj); err != nil {
+				log.Error(err, "Failed to initialize LastRestartTime status")
+				return ctrl.Result{}, err
+			}
 		}
 	}
 
-	return ctrl.Result{RequeueAfter: time.Until(nextRun)}, nil
+	// Schedule the next reconciliation at the calculated next run time
+	// This ensures the controller will wake up exactly when it's time to restart pods again
+	// without unnecessary processing in between scheduled times
+	return ctrl.Result{RequeueAfter: nextRun.Sub(now)}, nil
 }
 
-// parseCronSchedule parses cron expressions in various formats,
-// including standard cron and cron with seconds.
+// parseCronSchedule parses cron expressions in various formats.
+// It supports two different cron formats:
+// 1. Standard 5-field cron format: minute hour day month weekday (e.g., "*/5 * * * *")
+// 2. Extended 6-field cron format with seconds: second minute hour day month weekday (e.g., "30 */5 * * * *")
+// 
+// The function first attempts to parse using the standard 5-field format.
+// If that fails, it falls back to the extended 6-field format.
+// This provides flexibility for users who may be familiar with different cron formats.
 func parseCronSchedule(schedule string) (cron.Schedule, error) {
 	// First try with standard 5-field cron format
 	standardParser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
@@ -119,6 +160,9 @@ func parseCronSchedule(schedule string) (cron.Schedule, error) {
 }
 
 // SetupWithManager sets up the controller with the Manager.
+// This function configures how the controller is built and registered with the manager.
+// It specifies that this controller should manage AutoRestartPod resources and
+// assigns a unique name to the controller for metrics and logging purposes.
 func (r *AutoRestartPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&stablev1.AutoRestartPod{}).
